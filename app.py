@@ -2,17 +2,24 @@ import streamlit as st
 import pandas as pd
 import requests
 import os
+import json
+import re
 
 st.set_page_config(page_title="ChefSort AI", page_icon="🍳")
 
-st.title("🍳 ChefSort AI: Classify Recipes with LLaMA 3")
-st.write("Upload the EPICurious CSV file from Kaggle to classify recipes using free LLaMA 3 via OpenRouter.")
+st.title("🍳 Ez Cook: Classify Recipes with LLaMA 3")
+st.write("This app uses free LLaMA 3 via OpenRouter to classify recipes from the EPICurious dataset.")
 
-# Load uploaded CSV file
-def load_data(uploaded_file):
-    df = pd.read_csv(uploaded_file)
-    df = df[['Title', 'Ingredients']].dropna().sample(15).reset_index(drop=True)
-    return df
+# Load CSV directly from the project directory
+@st.cache_data
+def load_data():
+    try:
+        df = pd.read_csv("food_ingredients.csv")
+        df = df[['Title', 'Ingredients']].dropna().sample(15).reset_index(drop=True)
+        return df
+    except FileNotFoundError:
+        st.error("The file 'food_ingredients.csv' was not found in the project directory.")
+        return pd.DataFrame()
 
 # Call OpenRouter API
 def classify_recipe_with_llama(recipe_text: str) -> dict | None:
@@ -23,7 +30,7 @@ def classify_recipe_with_llama(recipe_text: str) -> dict | None:
 
     headers = {
         "Authorization": f"Bearer {api_key}",
-        "HTTP-Referer": "https://chefsort.streamlit.app",  # replace with your app URL
+        "HTTP-Referer": "https://chefsort.streamlit.app",  # replace with your actual Streamlit Cloud app URL
         "Content-Type": "application/json"
     }
 
@@ -50,12 +57,10 @@ def classify_recipe_with_llama(recipe_text: str) -> dict | None:
         st.code(res.text)
         return None
 
-# Upload section
-uploaded_file = st.file_uploader("Upload `EPICurious.csv`", type=["csv"])
+# Load dataset
+df = load_data()
 
-if uploaded_file:
-    df = load_data("EPICurious.csv")
-
+if not df.empty:
     selected_recipe = st.selectbox("Select a recipe to classify:", df['Title'])
     recipe_row = df[df['Title'] == selected_recipe].iloc[0]
 
@@ -65,13 +70,27 @@ if uploaded_file:
     if st.button("🔍 Classify Recipe"):
         with st.spinner("Sending to LLaMA 3..."):
             result = classify_recipe_with_llama(recipe_text)
+
             if result:
                 try:
-                    output = result["choices"][0]["message"]["content"]
+                    # Raw AI text output
+                    raw_output = result["choices"][0]["message"]["content"]
+
+                    # Remove code fences ```json ... ```
+                    clean_text = re.sub(r"^```(json)?|```$", "", raw_output.strip(), flags=re.IGNORECASE).strip()
+
+                    # Attempt JSON parse
+                    parsed = json.loads(clean_text)
+
                     st.success("AI Classification Result:")
-                    st.json(output)
-                except Exception:
-                    st.error("Failed to parse AI response.")
-                    st.write(result)
+                    st.json(parsed)
+
+                except json.JSONDecodeError:
+                    st.warning("Couldn't parse response as JSON. Showing raw result below:")
+                    st.code(result["choices"][0]["message"]["content"])
+
+                except Exception as e:
+                    st.error("Unexpected error while handling AI output.")
+                    st.exception(e)
 else:
-    st.info("Please upload the `EPICurious.csv` file to continue.")
+    st.warning("Dataset not loaded. Please make sure 'food_ingredients.csv' is in the same folder as this script.")
