@@ -1,0 +1,9 @@
+# Ignore just secrets.toml
+.streamlit/secrets.toml
+
+# Other common ignores
+__pycache__/
+*.pyc
+.env
+
+ez-cook-env/
