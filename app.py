@@ -7,18 +7,18 @@ import re
 
 st.set_page_config(page_title="ChefSort AI", page_icon="🍳")
 
-st.title("🍳 Ez Cook: Classify Recipes with LLaMA 3")
-st.write("This app uses free LLaMA 3 via OpenRouter to classify recipes from the EPICurious dataset.")
+st.title("🍳 Ez Cook: Classify Recipes with free open router model")
+st.write("This app uses free models via OpenRouter to classify recipes from the food_ingredients dataset.")
 
 # Load CSV directly from the project directory
 @st.cache_data
 def load_data():
     try:
-        df = pd.read_csv("food_ingredients.csv")
-        df = df[['Title', 'Ingredients']].dropna().sample(15).reset_index(drop=True)
+        df = pd.read_csv("food_ingredients_id.csv")
+        df = df[['Title', 'Ingredients', 'Cleaned_Ingredients']].dropna().sample(25).reset_index(drop=True)
         return df
     except FileNotFoundError:
-        st.error("The file 'food_ingredients.csv' was not found in the project directory.")
+        st.error("The file 'food_ingredients_id.csv' was not found in the project directory.")
         return pd.DataFrame()
 
 # Call OpenRouter API
@@ -30,7 +30,7 @@ def classify_recipe_with_llama(recipe_text: str) -> dict | None:
 
     headers = {
         "Authorization": f"Bearer {api_key}",
-        "HTTP-Referer": "https://chefsort.streamlit.app",  # replace with your actual Streamlit Cloud app URL
+        # "HTTP-Referer": "https://chefsort.streamlit.app",  # replace with your actual Streamlit Cloud app URL
         "Content-Type": "application/json"
     }
 
@@ -38,11 +38,14 @@ def classify_recipe_with_llama(recipe_text: str) -> dict | None:
         "You are a culinary AI assistant. Classify the given recipe (title and ingredients) "
         "into structured tags: cuisine, meal_type (breakfast/lunch/dinner/snack), "
         "dietary_tags (vegan, keto, gluten-free, etc.), and difficulty (easy, medium, hard). "
-        "Respond in JSON format with keys: cuisine, meal_type, dietary_tags, difficulty."
+        "similary_menus: find 2 similarities food menus with the given ingredients in the recipe. Add title of the menu and the reason why it is similar to the given recipe. "
+        "Respond in JSON format with keys: cuisine, meal_type, dietary_tags, similary_menus, difficulty."
+        "give the detail explaination in bahasa Indonesia if it is not already in bahasa Indonesia."
     )
 
     data = {
-        "model": "meta-llama/llama-3.3-8b-instruct:free",
+        # "model": "meta-llama/llama-3.3-8b-instruct:free",
+        "model": "mistralai/mistral-7b-instruct:free",
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": recipe_text}
@@ -64,11 +67,11 @@ if not df.empty:
     selected_recipe = st.selectbox("Select a recipe to classify:", df['Title'])
     recipe_row = df[df['Title'] == selected_recipe].iloc[0]
 
-    recipe_text = f"Title: {recipe_row['Title']}\nIngredients: {recipe_row['Ingredients']}"
+    recipe_text = f"Title: {recipe_row['Title']}\nIngredients:\n{recipe_row['Cleaned_Ingredients']}"
     st.text_area("📋 Recipe Content", recipe_text, height=150)
 
     if st.button("🔍 Classify Recipe"):
-        with st.spinner("Sending to LLaMA 3..."):
+        with st.spinner("Sending to the AI model..."):
             result = classify_recipe_with_llama(recipe_text)
 
             if result:
