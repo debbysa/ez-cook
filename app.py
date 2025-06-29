@@ -15,7 +15,7 @@ st.write("This app uses free models via OpenRouter to classify recipes from the 
 def load_data():
     try:
         df = pd.read_csv("food_ingredients_id.csv")
-        df = df[['Title', 'Ingredients', 'Cleaned_Ingredients']].dropna().sample(25).reset_index(drop=True)
+        df = df[['Title', 'Ingredients', 'Cleaned_Ingredients', 'Instructions']].dropna().sample(25).reset_index(drop=True)
         return df
     except FileNotFoundError:
         st.error("The file 'food_ingredients_id.csv' was not found in the project directory.")
@@ -64,36 +64,64 @@ def classify_recipe_with_llama(recipe_text: str) -> dict | None:
 df = load_data()
 
 if not df.empty:
-    selected_recipe = st.selectbox("Select a recipe to classify:", df['Title'])
-    recipe_row = df[df['Title'] == selected_recipe].iloc[0]
+    # Convert Titles to sorted list
+    recipe_titles = df['Title'].dropna().sort_values().tolist()
 
-    recipe_text = f"Title: {recipe_row['Title']}\nIngredients:\n{recipe_row['Cleaned_Ingredients']}"
-    st.text_area("📋 Recipe Content", recipe_text, height=150)
+    # Use st.selectbox directly (search is built-in)
+    selected_recipe = st.selectbox("🔍 Search and select a recipe:", recipe_titles)
 
-    if st.button("🔍 Classify Recipe"):
-        with st.spinner("Sending to the AI model..."):
-            result = classify_recipe_with_llama(recipe_text)
+    if selected_recipe:
+        recipe_row = df[df['Title'] == selected_recipe].iloc[0]
 
-            if result:
-                try:
-                    # Raw AI text output
-                    raw_output = result["choices"][0]["message"]["content"]
+        # Convert instructions to markdown ordered list
+        instructions = recipe_row['Instructions']
+        instructions_lines = instructions.split('\n')
+        markdown_instructions = "\n".join(
+            [f"{line.strip()}" for i, line in enumerate(instructions_lines) if line.strip()]
+        )
 
-                    # Remove code fences ```json ... ```
-                    clean_text = re.sub(r"^```(json)?|```$", "", raw_output.strip(), flags=re.IGNORECASE).strip()
+        # Markdown-formatted recipe
+        recipe_text_md = (
+            f"### **{recipe_row['Title']}**\n\n"
+            f"**Ingredients:**\n\n{recipe_row['Cleaned_Ingredients']}\n\n"
+            f"**Instructions:**\n\n{markdown_instructions}"
+        )
 
-                    # Attempt JSON parse
-                    parsed = json.loads(clean_text)
+        st.markdown("### 📋 Recipe Content")
+        st.markdown(recipe_text_md)
 
-                    st.success("AI Classification Result:")
-                    st.json(parsed)
+        if st.button("🔍 Classify Recipe"):
+            with st.spinner("Sending to the AI model..."):
+                result = classify_recipe_with_llama(recipe_text_md)
 
-                except json.JSONDecodeError:
-                    st.warning("Couldn't parse response as JSON. Showing raw result below:")
-                    st.code(result["choices"][0]["message"]["content"])
+                if result:
+                    try:
+                        # # Clean AI output
+                        # raw_output = result["choices"][0]["message"]["content"]
+                        # clean_text = re.sub(r"^```(json)?|```$", "", raw_output.strip(), flags=re.IGNORECASE).strip()
+                        # parsed = json.loads(clean_text)
 
-                except Exception as e:
-                    st.error("Unexpected error while handling AI output.")
-                    st.exception(e)
+                        # st.success("✅ AI Classification Result:")
+                        # st.json(parsed)
+                        # ---------------------------------------------------
+                        # Raw AI text output
+                        raw_output = result["choices"][0]["message"]["content"]
+
+                        # Remove code fences ```json ... ```
+                        clean_text = re.sub(r"^```(json)?|```$", "", raw_output.strip(), flags=re.IGNORECASE).strip()
+
+                        # Attempt JSON parse
+                        parsed = json.loads(clean_text)
+
+                        st.success("AI Classification Result:")
+                        st.json(parsed)
+
+                    except json.JSONDecodeError:
+                        st.warning("⚠️ Couldn't parse response as JSON. Showing raw result below:")
+                        st.code(result["choices"][0]["message"]["content"])
+
+                    except Exception as e:
+                        st.error("❌ Unexpected error while handling AI output.")
+                        st.exception(e)
 else:
-    st.warning("Dataset not loaded. Please make sure 'food_ingredients.csv' is in the same folder as this script.")
+    st.warning("Dataset not loaded. Please make sure 'food_ingredients_id.csv' is available.")
